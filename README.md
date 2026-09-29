@@ -53,6 +53,8 @@ Available task groups:
 - `polymath-eu-low` / `polymath-eu-medium` / `polymath-eu-high` / `polymath-eu-top` - PolyMath multilingual math reasoning (EU languages, 0-shot, `\boxed{}` answer extraction), one group per difficulty tier
 - `generic-multilingual` - XWinograd, XCOPA, XStoryCloze
 - `include` - INCLUDE benchmarks
+- `crows-pairs` - CrowS-Pairs social bias benchmark (English, 0-shot)
+- `toxigen` - ToxiGen hate speech detection benchmark (English, 0-shot, accuracy); see [benchmark details](docs/TASKS.md#toxigen)
 
 Super groups combine multiple task groups:
 - `oellm-multilingual` - All multilingual benchmarks combined

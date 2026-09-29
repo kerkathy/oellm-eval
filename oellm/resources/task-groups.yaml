@@ -1,6 +1,7 @@
 task_metrics:
   bbq: accuracy
   crows_pairs_english: pct_stereotype
+  toxigen: acc
   mmlu: acc
   mmlu_prox_cs: exact_match
   mmlu_prox_de: exact_match
@@ -791,6 +792,15 @@ task_groups:
     subset: english
     tasks:
       - task: crows_pairs_english
+
+  toxigen:
+    description: "ToxiGen hate speech detection benchmark (English, 0-shot)."
+    suite: lm-eval-harness
+    n_shots: [0]
+    dataset: skg/toxigen-data
+    subset: annotated
+    tasks:
+      - task: toxigen
 
   global-piqa-eu-completions:
     description: "Global PIQA European languages — multiple-choice completions (0-shot, mrlbenchmarks/global-piqa-nonparallel)"
