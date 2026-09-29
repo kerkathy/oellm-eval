@@ -503,6 +503,16 @@ task_groups:
         n_shots: [0]
         suite: evalchemy
 
+  realtoxicityprompts:
+    description: "RealToxicityPrompts (English, 0-shot; upstream exact_match, not a toxicity score)."
+    suite: lighteval
+    metric: exact_match
+    n_shots: [0]
+    dataset: allenai/real-toxicity-prompts
+    subset: default
+    tasks:
+      - task: real_toxicity_prompts
+
   crows-pairs:
     description: "CrowS-Pairs social bias benchmark (English, 0-shot)."
     suite: lm-eval-harness

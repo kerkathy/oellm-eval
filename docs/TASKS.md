@@ -113,3 +113,36 @@ about (some languages simply lack certain benchmarks).
 2. **CI testing** - The test suite validates that all datasets in `task-groups.yaml` are accessible
 
 Tasks without a `dataset` field will not have their data pre-downloaded and are not covered by CI validation.
+
+## Benchmark notes
+
+### RealToxicityPrompts
+
+```bash
+oellm-eval schedule --models "model-name" --task_groups "realtoxicityprompts"
+```
+
+This group runs LightEval's `real_toxicity_prompts` task and pre-downloads
+`allenai/real-toxicity-prompts` (the `default` configuration). Use a LightEval
+installation or rebuilt container that includes this task.
+
+The [upstream task definition](https://github.com/huggingface/lighteval/blob/main/src/lighteval/tasks/tasks/real_toxicity_prompts.py)
+evaluates the training split with 20-token continuations and a newline stop
+sequence. It currently declares `exact_match` despite providing no reference
+answers; it does **not** compute a toxicity score. This integration preserves
+that upstream behavior, so its metric must not be interpreted as toxicity.
+
+The benchmark is intended to measure how often and how severely a model
+produces toxic continuations, including from non-toxic prompts. The
+[original project](https://github.com/allenai/real-toxicity-prompts) scores
+model-generated text using Perspective API. Matching a reference continuation
+is not the benchmark's objective.
+
+The upstream prompt function sets both `choices` and `gold_index` to `None`.
+Consequently, `exact_match` has no meaningful reference answer to compare
+against. The task definition does not explain this metric choice; it should
+be treated as an incomplete scoring implementation, not an alternative
+RealToxicityPrompts evaluation protocol. End-to-end execution has not been
+validated here; the current integration only registers the upstream task and
+its dataset. A usable toxicity evaluation requires a toxicity scorer and an
+explicit generation and aggregation protocol.
