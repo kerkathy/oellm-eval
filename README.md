@@ -8,7 +8,7 @@ A lightweight CLI for scheduling LLM evaluations across multiple HPC clusters us
 - **Collect results** and check for missing evaluations: `oellm-eval collect`
 - **Task groups** for pre-defined evaluation suites with automatic dataset pre-downloading
 - **Multi-cluster support** with auto-detection (Leonardo, LUMI, JURECA, Snellius)
-- **Automatic building and deployment of containers** 
+- **Automatic building and deployment of containers**
 
 ## Quick Start
 
@@ -18,7 +18,7 @@ A lightweight CLI for scheduling LLM evaluations across multiple HPC clusters us
 
 ```bash
 # Install the package
-uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git
+uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git@stable
 
 # Run evaluations using a task group (recommended)
 oellm-eval schedule \
@@ -54,7 +54,11 @@ Available task groups:
 - `mgsm-eu` - Multilingual GSM benchmarks
 - `polymath-eu-low` / `polymath-eu-medium` / `polymath-eu-high` / `polymath-eu-top` - PolyMath multilingual math reasoning (EU languages, 0-shot, `\boxed{}` answer extraction), one group per difficulty tier
 - `generic-multilingual` - XWinograd, XCOPA, XStoryCloze
+- `bbq` - BBQ social-bias evaluation through Inspect AI (zero-shot)
 - `include` - INCLUDE benchmarks
+- `toxigen` - ToxiGen hate speech detection benchmark (English, 0-shot, accuracy); see [benchmark details](docs/TASKS.md#toxigen)
+- `gpqa-diamond` - GPQA Diamond, generative (0-shot, pass@1, up to 32768 new tokens) for instruct/reasoning checkpoints, in English and Finnish (professionally post-edited `LumiOpen/GPQA-FI`). English reads the gated `Idavidrein/gpqa`, so the HF token must have access. Defined as custom lighteval tasks, see [docs/TASKS.md](docs/TASKS.md#custom-lighteval-tasks). Schedule it separately with a small `BATCH_SIZE`, see [Lighteval Batch Size](#lighteval-batch-size)
+- `toxigen` - ToxiGen hate speech detection benchmark (English, 0-shot, accuracy); see [benchmark details](docs/TASKS.md#toxigen)
 
 Super groups combine multiple task groups:
 - `oellm-multilingual` - All multilingual benchmarks combined
@@ -135,6 +139,12 @@ Notes:
   lack certain benchmarks (e.g. Italian/Portuguese have no MGSM), so a super
   group bracket transparently omits the missing ones.
 
+## Using Inspect AI
+
+Inspect AI requires a separate environment to avoid dependency conflicts with lm-eval and lighteval. Follow the [environment setup instructions](docs/VENV.md#inspect-ai), then pass its path with `--venv_path` when scheduling evaluations.
+
+For the task BBQ, follow the [BBQ guide](docs/BBQ.md).
+
 ## Running Locally (without SLURM)
 
 The `--local` flag lets you run evaluations directly on your machine without a cluster or Singularity container. It generates the same eval script and executes it with bash, injecting fake SLURM environment variables so all tasks run sequentially in a single process. This is useful for testing that tasks and models are correctly configured before submitting to a cluster.
@@ -181,6 +191,42 @@ oellm-eval schedule --models "model-name" --task_groups "open-sci-0.01" \
 
 Use exact env var names: `PARTITION`, `ACCOUNT`, `GPUS_PER_NODE`, `SLURM_MEM`. `TIME` (HH:MM:SS) overrides the time limit.
 
+## LLM Judge benchmarks (JudgeArena)
+
+LLM judge benchmarks are available through JudgeArena. Packaged tasks are
+registered in `task-groups.yaml`, so they use the JudgeArena runner
+automatically:
+
+```bash
+oellm-eval schedule \
+  --models /path/to/model \
+  --tasks arena-hard-v2.0 \
+  --n_shot 0 \
+  --judgearena_kwargs '{"judge.model":"OpenRouter/google/gemma-4-31b-it"}'
+```
+
+Use `--task_groups elo-en`, `elo-eu`, or `elo-multilingual` to schedule the
+language-specific ELO tasks. The standalone `-ja` task variants are not
+registered.
+
+Pass JudgeArena runtime settings such as the judge model through
+`--judgearena_kwargs`. Use `--limit` to set the number of instructions. Local
+task files, prompt overrides, and `meta-eval-*` tasks are not supported.
+
+The selected venv or container must include the `judgearena` command. Use
+`--download_only` to download each selected task into the shared
+`JUDGEARENA_DATA` and `HF_HOME` directories before an offline cluster run:
+
+```bash
+oellm-eval schedule \
+  --models /path/to/model \
+  --task_groups judgearena \
+  --download_only
+```
+
+`oellm-eval collect` reads `run-metadata.v1.json` and adds its numeric metrics to
+the result CSV. It leaves JudgeArena's reports and annotations unchanged.
+
 ## Lighteval Batch Size
 
 For lighteval runs, generated jobs default to `batch_size=1` for local runs and
@@ -204,6 +250,28 @@ for example:
 MODEL_ARGS='batch_size=8' oellm-eval schedule \
   --models "model-name" --task_groups "belebele-eu-cf" --venv_path .venv
 ```
+
+### Long generations (`gpqa-diamond`)
+
+These tasks generate up to 32768 tokens per sample, and `lighteval accelerate`
+keeps a float32 score vector the size of the vocabulary for every generated
+token of every sequence in the batch. At 32k tokens that is ~20 GB per
+sequence for a 150k-token vocabulary (Qwen, Llama 3), plus ~5 GB of KV cache
+for a 7-8B model, on top of the weights. Reasoning models write that much: with
+Qwen3-8B, `batch_size=8` ran out of memory on a 256 GB MI325X, so the default
+`batch_size=32` does not fit either. Schedule the group on its own with a batch
+size that fits, for example:
+
+```bash
+# 64 GB GPU (one LUMI MI250X GCD): Qwen2.5-7B-Instruct completed both languages
+BATCH_SIZE=1 oellm-eval schedule --models "model-name" --task_groups "gpqa-diamond"
+# 256 GB GPU (MI325X): Qwen3-8B completed 40 Finnish questions
+BATCH_SIZE=4 oellm-eval schedule --models "model-name" --task_groups "gpqa-diamond"
+```
+
+Expect hours per language: a batch runs until its longest sample stops, so one
+long answer holds up the whole batch. With `BATCH_SIZE=1` on one MI250X GCD,
+Qwen2.5-7B-Instruct took 1.5 h for English and 2.8 h for Finnish.
 
 ### Workaround for `acc_norm` tasks
 
@@ -235,7 +303,7 @@ If you use custom tasks via `--tasks` that are not in the task groups registry, 
 
 ## Collecting Results
 
-After evaluations complete, collect results into a CSV.  `collect-results` **recursively** searches the given directory for every `jobs.csv` file and every `.json` result file, so you can point it at a top-level output folder that contains many sub-runs:
+After evaluations complete, collect results into a CSV.  `collect-results` **recursively** searches the given directory for every `jobs.csv` file and every `.json` or Inspect `.eval` result file, so you can point it at a top-level output folder that contains many sub-runs:
 
 ```
 output/
@@ -279,13 +347,31 @@ oellm-eval schedule --eval_csv_path custom_evals.csv
 ### General Installation
 
 ```bash
-uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git
+uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git@stable
 ```
 
 Update to latest:
 ```bash
 uv tool upgrade oellm-eval
 ```
+
+### Versions
+
+`main` is the beta channel. Its version ends in `bN` (for example `0.3.0b1`), and any
+commit on it may change what a task group measures. From 0.3.0 on, releases are git tags
+such as `v0.3.0`, and the `stable` branch points at the latest one. Pin a tag for an
+evaluation campaign so that every run uses the same tasks, shots and metrics:
+
+```bash
+uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git@v0.3.0   # pinned
+uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git@stable   # latest release
+uv tool install -p 3.12 git+https://github.com/OpenEuroLLM/oellm-eval.git          # main (beta)
+```
+
+`uv tool upgrade oellm-eval` keeps you on the ref you installed from. Include the output
+of `oellm-eval --version` in bug reports. [CHANGELOG.md](CHANGELOG.md) lists what changed in
+each version, with the changes that can affect results in a section of their own. How
+versions are chosen and releases are cut is described in [docs/RELEASING.md](docs/RELEASING.md).
 
 ### JURECA/JSC Specifics
 

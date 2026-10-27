@@ -1,5 +1,6 @@
 from oellm.task_groups import (
     TaskGroup,
+    _build_task_suite_map,
     _expand_lang_templates,
     _expand_task_groups,
     _load_task_groups_data,
@@ -201,3 +202,44 @@ class TestExpandTaskGroupsWithTemplates:
     def test_global_piqa_completions_expands_to_32_tasks(self):
         results = _expand_task_groups(["global-piqa-eu-completions"])
         assert len(results) == 32
+
+
+def test_judgearena_does_not_register_standalone_ja_variants():
+    assert {"alpaca-eval-ja", "arena-hard-v0.1-ja", "arena-hard-v2.0-ja"}.isdisjoint(
+        _build_task_suite_map()
+    )
+
+
+def test_judgearena_elo_categories():
+    en = {result.task for result in _expand_task_groups(["elo-en"])}
+    eu = {result.task for result in _expand_task_groups(["elo-eu"])}
+    multilingual = {result.task for result in _expand_task_groups(["elo-multilingual"])}
+
+    assert en == {
+        "elo-comparia-en",
+        "elo-lmarena-en",
+        "elo-lmarena-100k-en",
+        "elo-lmarena-140k-en",
+    }
+    assert en <= eu <= multilingual
+    assert len(eu) == 32
+    assert len(multilingual) == 53
+    assert {result.task for result in _expand_task_groups(["elo-eu[deu_Latn]"])} == {
+        "elo-lmarena-de",
+        "elo-lmarena-100k-de",
+        "elo-lmarena-140k-de",
+    }
+    assert {
+        (result.suite, result.n_shot) for result in _expand_task_groups(["elo-eu"])
+    } == {("judgearena", 0)}
+
+
+def test_judgearena_additional_routes_only_three_tasks():
+    assert {
+        (result.task, result.suite, result.n_shot)
+        for result in _expand_task_groups(["judgearena-additional"])
+    } == {
+        ("mt-bench-101", "judgearena", 0),
+        ("m-arena-hard-v0.1-EU", "judgearena", 0),
+        ("m-arena-hard-v2.0-EU", "judgearena", 0),
+    }
